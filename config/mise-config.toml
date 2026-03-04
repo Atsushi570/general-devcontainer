@@ -1,0 +1,5 @@
+[tools]
+node = "lts"
+python = "latest"
+go = "latest"
+java = "zulu-25"

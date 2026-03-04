@@ -1,0 +1,29 @@
+services:
+  dev:
+    build: .
+    container_name: general-dev
+    hostname: devcontainer
+    volumes:
+      # Home directory persistence (tools, config, history, etc.)
+      - devuser-home:/home/devuser
+      # Source code (Finder accessible on host)
+      - ${HOME}/devcontainer-ghq:/home/devuser/ghq
+      # Docker-outside-of-Docker
+      - /var/run/docker.sock:/var/run/docker.sock
+      # SSH keys (read-only, staged for entrypoint to copy keys only)
+      - type: bind
+        source: ${HOME}/.ssh
+        target: /home/devuser/.host-ssh
+        read_only: true
+      # AWS profiles (read-only from host)
+      - type: bind
+        source: ${HOME}/.aws
+        target: /home/devuser/.host-aws
+        read_only: true
+    environment:
+      - TZ=${TZ:-Asia/Tokyo}
+    tty: true
+    stdin_open: true
+
+volumes:
+  devuser-home:
