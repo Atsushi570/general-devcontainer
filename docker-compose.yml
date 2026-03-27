@@ -20,11 +20,8 @@ services:
         source: ${HOME}/.aws
         target: /home/devuser/.host-aws
         read_only: true
-      # Google Workspace CLI credentials (read-only from host)
-      - type: bind
-        source: ${HOME}/.config/gws
-        target: /home/devuser/.host-gws
-        read_only: true
+      # Google Workspace CLI credentials
+      - ${HOME}/.config/gws:/home/devuser/.config/gws
     environment:
       - TZ=${TZ:-Asia/Tokyo}
     tty: true
