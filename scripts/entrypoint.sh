@@ -140,6 +140,17 @@ sync_aws() {
 }
 
 # =============================================================================
+# 7. GWS config sync (host → container, initial only)
+# =============================================================================
+sync_gws() {
+  if [ -d "$HOME_DIR/.host-gws" ] && [ ! -d "$HOME_DIR/.config/gws" ]; then
+    mkdir -p "$HOME_DIR/.config"
+    cp -r "$HOME_DIR/.host-gws" "$HOME_DIR/.config/gws"
+    echo "[entrypoint] GWS config synced from host"
+  fi
+}
+
+# =============================================================================
 # 7. mise install (install missing runtimes)
 # =============================================================================
 install_runtimes() {
@@ -160,6 +171,7 @@ fix_ownership
 setup_ssh
 setup_git
 sync_aws
+sync_gws
 install_runtimes
 
 echo "[entrypoint] Ready!"
