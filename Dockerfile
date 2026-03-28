@@ -114,6 +114,14 @@ RUN ARCH=$(dpkg --print-architecture) \
     && chmod +x /usr/local/bin/terraform \
     && rm /tmp/terraform.zip
 
+# Google Cloud CLI (includes bq for BigQuery)
+RUN curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg \
+    | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
+    | tee /etc/apt/sources.list.d/google-cloud-sdk.list \
+    && apt-get update && apt-get install -y --no-install-recommends google-cloud-cli \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
 # fzf (latest, for --zsh support / Ctrl+R history search)
 RUN FZF_VERSION=$(curl -fsSL https://api.github.com/repos/junegunn/fzf/releases/latest | jq -r .tag_name | sed 's/^v//') \
     && ARCH=$(dpkg --print-architecture) \
