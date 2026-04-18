@@ -26,6 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     locales \
     xclip \
     openssh-client \
+    rsync \
     && locale-gen en_US.UTF-8 \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 

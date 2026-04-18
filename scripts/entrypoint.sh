@@ -99,17 +99,31 @@ setup_ssh() {
   if [ -d "$HOME_DIR/.host-ssh" ]; then
     mkdir -p "$HOME_DIR/.ssh"
     chmod 700 "$HOME_DIR/.ssh"
-    # Copy key files and known_hosts only (skip macOS config)
-    for f in "$HOME_DIR/.host-ssh/"id_* "$HOME_DIR/.host-ssh/known_hosts"*; do
-      [ -f "$f" ] || continue
-      local basename
-      basename=$(basename "$f")
-      cp "$f" "$HOME_DIR/.ssh/$basename"
-      chmod 600 "$HOME_DIR/.ssh/$basename"
-    done
-    # Make public keys readable
-    chmod 644 "$HOME_DIR/.ssh/"*.pub 2>/dev/null || true
-    echo "[entrypoint] SSH keys copied from host"
+    # Mirror everything except macOS metadata (.DS_Store) from host .ssh,
+    # including subdirectories like keys/ and pem/, plus config / known_hosts.
+    # rsync preserves layout; fall back to cp -R if rsync is unavailable.
+    if command -v rsync &>/dev/null; then
+      rsync -a --delete \
+        --exclude='.DS_Store' \
+        "$HOME_DIR/.host-ssh/" "$HOME_DIR/.ssh/"
+    else
+      # cp fallback: wipe and recopy (excluding .DS_Store)
+      find "$HOME_DIR/.ssh/" -mindepth 1 -maxdepth 1 ! -name '.host-ssh' -exec rm -rf {} +
+      cp -R "$HOME_DIR/.host-ssh/." "$HOME_DIR/.ssh/"
+      find "$HOME_DIR/.ssh" -name '.DS_Store' -delete
+    fi
+
+    # Strip macOS-only options from config (UseKeychain / AddKeysToAgent)
+    if [ -f "$HOME_DIR/.ssh/config" ]; then
+      sed -i -E '/^[[:space:]]*(UseKeychain|AddKeysToAgent)[[:space:]]+/Id' \
+        "$HOME_DIR/.ssh/config"
+    fi
+
+    # Permissions: dirs 700, private keys 600, public keys 644
+    find "$HOME_DIR/.ssh" -type d -exec chmod 700 {} +
+    find "$HOME_DIR/.ssh" -type f -exec chmod 600 {} +
+    find "$HOME_DIR/.ssh" -type f -name '*.pub' -exec chmod 644 {} +
+    echo "[entrypoint] SSH keys/config synced from host"
   else
     echo "[entrypoint] WARNING: No SSH keys found - mount ~/.ssh from host"
   fi
