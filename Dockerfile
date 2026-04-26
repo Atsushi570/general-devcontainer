@@ -125,6 +125,12 @@ RUN curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg \
     && apt-get update && apt-get install -y --no-install-recommends google-cloud-cli \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# yq (YAML/JSON/XML processor)
+RUN ARCH=$(dpkg --print-architecture) \
+    && YQ_VERSION=$(curl -fsSL https://api.github.com/repos/mikefarah/yq/releases/latest | jq -r .tag_name | sed 's/^v//') \
+    && curl -fsSL "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_${ARCH}" -o /usr/local/bin/yq \
+    && chmod +x /usr/local/bin/yq
+
 # fzf (latest, for --zsh support / Ctrl+R history search)
 RUN FZF_VERSION=$(curl -fsSL https://api.github.com/repos/junegunn/fzf/releases/latest | jq -r .tag_name | sed 's/^v//') \
     && ARCH=$(dpkg --print-architecture) \
