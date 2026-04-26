@@ -2,14 +2,17 @@ services:
   dev:
     build: .
     container_name: general-dev
+    network_mode: host
     hostname: devcontainer
+    depends_on:
+      - dind
     volumes:
       # Home directory persistence (tools, config, history, etc.)
       - devuser-home:/home/devuser
       # Source code (Finder accessible on host)
       - ${HOME}/devcontainer-ghq:/home/devuser/ghq
-      # Docker-outside-of-Docker
-      - /var/run/docker.sock:/var/run/docker.sock
+      # Host Docker socket (kept for occasional access to host containers/images via DOCKER_HOST=unix:///var/run/host-docker.sock)
+      - /var/run/docker.sock:/var/run/host-docker.sock
       # SSH keys (read-only, staged for entrypoint to copy keys only)
       - type: bind
         source: ${HOME}/.ssh
@@ -26,8 +29,29 @@ services:
       - ${HOME}/.config/gcloud:/home/devuser/.config/gcloud
     environment:
       - TZ=${TZ:-Asia/Tokyo}
+      # Default to the DinD sidecar; switch to host-docker.sock when host Docker is needed.
+      - DOCKER_HOST=tcp://127.0.0.1:2375
     tty: true
     stdin_open: true
 
+  dind:
+    image: docker:28-dind
+    container_name: general-dev-dind
+    privileged: true
+    network_mode: host
+    environment:
+      - DOCKER_TLS_CERTDIR=
+    command:
+      - dockerd
+      - --host=tcp://127.0.0.1:2375
+      - --tls=false
+    volumes:
+      # Persist images, containers, and build cache across restarts
+      - dind-data:/var/lib/docker
+      # Source code mounted at the SAME path as in the dev container,
+      # so `-v $(pwd):/...` from inside dev resolves to the same files here.
+      - ${HOME}/devcontainer-ghq:/home/devuser/ghq
+
 volumes:
   devuser-home:
+  dind-data:
