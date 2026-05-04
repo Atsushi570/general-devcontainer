@@ -4,8 +4,10 @@ services:
     container_name: general-dev
     network_mode: host
     hostname: devcontainer
+    restart: unless-stopped
     depends_on:
-      - dind
+      dind:
+        condition: service_healthy
     volumes:
       # Home directory persistence (tools, config, history, etc.)
       - devuser-home:/home/devuser
@@ -39,12 +41,19 @@ services:
     container_name: general-dev-dind
     privileged: true
     network_mode: host
+    restart: unless-stopped
     environment:
       - DOCKER_TLS_CERTDIR=
     command:
       - dockerd
       - --host=tcp://127.0.0.1:2375
       - --tls=false
+    healthcheck:
+      test: ["CMD", "docker", "-H", "tcp://127.0.0.1:2375", "info"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
     volumes:
       # Persist images, containers, and build cache across restarts
       - dind-data:/var/lib/docker
