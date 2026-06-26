@@ -1,0 +1,26 @@
+# sshd config for Zed remote development.
+#
+# The container runs with network_mode: host, so this port is reachable from
+# the macOS host at localhost:2223 (no port mapping needed).
+# Port 2222 is avoided because Docker Desktop's host-network proxy already
+# binds it.
+#
+# Connect from the host with:
+#   zed "ssh://devuser@localhost:2223/home/devuser/ghq/<owner>/<repo>"
+
+Port 2223
+
+# Public-key auth only. devuser has no password (it would be a locked account),
+# so UsePAM yes is required — without it sshd rejects the login with
+# "account is locked" even when the public key matches.
+PasswordAuthentication no
+PubkeyAuthentication yes
+UsePAM yes
+PermitRootLogin no
+
+AuthorizedKeysFile .ssh/authorized_keys
+StrictModes yes
+
+# Keep idle Zed sessions alive.
+ClientAliveInterval 60
+ClientAliveCountMax 10

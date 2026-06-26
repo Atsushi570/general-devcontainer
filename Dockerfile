@@ -26,6 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     locales \
     xclip \
     openssh-client \
+    openssh-server \
     rsync \
     libgl1 \
     libglib2.0-0t64 \
@@ -68,7 +69,11 @@ RUN userdel -r ubuntu 2>/dev/null; groupdel ubuntu 2>/dev/null; \
     groupadd -g 1000 devuser \
     && useradd -m -u 1000 -g 1000 -s /bin/zsh devuser \
     && echo "devuser ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/devuser \
-    && chmod 0440 /etc/sudoers.d/devuser
+    && chmod 0440 /etc/sudoers.d/devuser \
+    # useradd creates a "!"-locked account (no password). sshd refuses pubkey
+    # logins to locked accounts unless UsePAM is on; unlock it so SSH works
+    # regardless of PAM. The account stays passwordless (no password login).
+    && usermod -p '*' devuser
 
 # =============================================================================
 # 5. Binary tools (ghq, go-task, AWS CLI, Terraform)
@@ -143,6 +148,10 @@ RUN FZF_VERSION=$(curl -fsSL https://api.github.com/repos/junegunn/fzf/releases/
 # 6. Dotfiles to /etc/skel/ (home is overwritten by volume)
 # =============================================================================
 COPY config/ssh_config /etc/ssh/ssh_config.d/99-devcontainer.conf
+# sshd config for Zed remote development (port 2223). The privilege-separation
+# dir is needed for sshd to start.
+COPY config/sshd_config /etc/ssh/sshd_config.d/zed.conf
+RUN mkdir -p /run/sshd
 COPY config/.zshrc /etc/skel/.zshrc
 COPY config/.gitconfig /etc/skel/.gitconfig
 COPY config/.tmux.conf /etc/skel/.tmux.conf

@@ -119,13 +119,44 @@ setup_ssh() {
         "$HOME_DIR/.ssh/config"
     fi
 
+    # Authorize the host's own public keys so Zed (running on the host) can SSH
+    # in. rsync --delete above may wipe authorized_keys (host has no such file),
+    # so re-add the host's *.pub afterwards. Append-if-missing to preserve any
+    # other authorized keys the host's ~/.ssh already carried.
+    local ak="$HOME_DIR/.ssh/authorized_keys"
+    touch "$ak"
+    for pub in "$HOME_DIR"/.ssh/*.pub; do
+      [ -f "$pub" ] || continue
+      key="$(cat "$pub")"
+      grep -qF "$key" "$ak" 2>/dev/null || printf '%s\n' "$key" >> "$ak"
+    done
+
     # Permissions: dirs 700, private keys 600, public keys 644
     find "$HOME_DIR/.ssh" -type d -exec chmod 700 {} +
     find "$HOME_DIR/.ssh" -type f -exec chmod 600 {} +
     find "$HOME_DIR/.ssh" -type f -name '*.pub' -exec chmod 644 {} +
-    echo "[entrypoint] SSH keys/config synced from host"
+    echo "[entrypoint] SSH keys/config synced from host (authorized_keys from *.pub)"
   else
     echo "[entrypoint] WARNING: No SSH keys found - mount ~/.ssh from host"
+  fi
+}
+
+# =============================================================================
+# 4b. sshd for Zed remote development (port 2223, host network -> localhost:2223)
+# =============================================================================
+setup_sshd() {
+  # Host keys are generated on package install; regenerate if missing.
+  if ! ls /etc/ssh/ssh_host_*_key >/dev/null 2>&1; then
+    sudo ssh-keygen -A
+  fi
+  sudo mkdir -p /run/sshd
+  # -e logs to stderr (container logs). Config lives in
+  # /etc/ssh/sshd_config.d/zed.conf (Port 2223, UsePAM yes, pubkey only).
+  if ! pgrep -x sshd >/dev/null 2>&1; then
+    sudo /usr/sbin/sshd -E /var/log/sshd-zed.log
+    echo "[entrypoint] sshd started on port 2223 (Zed remote)"
+  else
+    echo "[entrypoint] sshd already running"
   fi
 }
 
@@ -183,6 +214,7 @@ init_dotfiles
 setup_docker
 fix_ownership
 setup_ssh
+setup_sshd
 setup_git
 sync_aws
 sync_gws
