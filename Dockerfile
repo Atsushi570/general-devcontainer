@@ -152,6 +152,7 @@ COPY config/ssh_config /etc/ssh/ssh_config.d/99-devcontainer.conf
 # dir is needed for sshd to start.
 COPY config/sshd_config /etc/ssh/sshd_config.d/zed.conf
 RUN mkdir -p /run/sshd
+COPY config/.zshenv /etc/skel/.zshenv
 COPY config/.zshrc /etc/skel/.zshrc
 COPY config/.gitconfig /etc/skel/.gitconfig
 COPY config/.tmux.conf /etc/skel/.tmux.conf

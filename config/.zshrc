@@ -19,7 +19,7 @@ source <(fzf --zsh) 2>/dev/null \
        [ -f /usr/share/doc/fzf/examples/completion.zsh ] && source /usr/share/doc/fzf/examples/completion.zsh; }
 
 # mise
-eval "$(mise activate zsh)"
+command -v mise >/dev/null && eval "$(mise activate zsh)"
 
 # History
 HISTFILE=~/.zsh_history
