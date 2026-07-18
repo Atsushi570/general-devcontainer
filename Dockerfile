@@ -28,6 +28,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     openssh-client \
     openssh-server \
     rsync \
+    postgresql-client \
+    direnv \
     libgl1 \
     libglib2.0-0t64 \
     && locale-gen en_US.UTF-8 \

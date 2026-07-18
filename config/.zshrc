@@ -21,6 +21,9 @@ source <(fzf --zsh) 2>/dev/null \
 # mise
 command -v mise >/dev/null && eval "$(mise activate zsh)"
 
+# direnv (per-directory env; loads .env via .envrc `dotenv`. run `direnv allow` once per repo)
+command -v direnv >/dev/null && eval "$(direnv hook zsh)"
+
 # History
 HISTFILE=~/.zsh_history
 HISTSIZE=50000
