@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Claude Code のフックから呼ばれ、呼び出し元ペインの状態を tmux に記録する。
+# 状態はペインの @claude_state に持たせる（ペイン単位。分割していても混ざらない）。
+#   busy    = 実行中
+#   waiting = 入力待ち（許可を求めている / 質問している）
+#   done    = 応答完了
+#   clear   = 状態を消す（SessionEnd。Claude Code 終了後に表示が残らないように）
+# 引数: $1 = busy|waiting|done|clear
+#
+# 音も鳴らす（claude-sound。waiting=Hero / done=Frog、busy は無音）。
+# tmux の外でも音だけは鳴らしたいので、音は tmux 判定より前に呼ぶ。
+set -u
+
+state="${1:-}"
+[ -z "$state" ] && exit 0
+
+# 音（あれば）。フックをブロックしないよう失敗は無視する。
+if command -v claude-sound >/dev/null 2>&1; then
+  claude-sound "$state" >/dev/null 2>&1 || true
+elif [ -x "$HOME/.local/bin/claude-sound" ]; then
+  "$HOME/.local/bin/claude-sound" "$state" >/dev/null 2>&1 || true
+fi
+
+# 以降は tmux 配下のときだけ（ホスト実行や CI で無害に終わる）
+[ -z "${TMUX:-}" ] && exit 0
+[ -z "${TMUX_PANE:-}" ] && exit 0
+command -v tmux >/dev/null 2>&1 || exit 0
+
+# clear は状態そのものを消す（-u で unset）。set しないこと。
+# そうしないと空文字が入って「Claude を動かしていないペイン」と区別できなくなる。
+if [ "$state" = "clear" ]; then
+  tmux set-option -pu -t "$TMUX_PANE" @claude_state 2>/dev/null || true
+  exit 0
+fi
+
+tmux set-option -p -t "$TMUX_PANE" @claude_state "$state" 2>/dev/null || true
+
+# 待ちのときはベルも鳴らす。コンテナ内では音が出せないので、これが
+# ホストの tmux → iTerm2 に伝わる唯一の通知経路になる。
+if [ "$state" = "waiting" ]; then
+  printf '\a' 2>/dev/null || true
+fi
+
+exit 0

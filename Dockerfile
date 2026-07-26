@@ -158,8 +158,12 @@ COPY config/.zshenv /etc/skel/.zshenv
 COPY config/.zshrc /etc/skel/.zshrc
 COPY config/.gitconfig /etc/skel/.gitconfig
 COPY config/.tmux.conf /etc/skel/.tmux.conf
+COPY config/.gitmux.conf /etc/skel/.gitmux.conf
 RUN mkdir -p /etc/skel/.config/mise
 COPY config/mise-config.toml /etc/skel/.config/mise/config.toml
+# Claude Code のフック定義（ペインボーダーの状態表示を呼び出す）
+RUN mkdir -p /etc/skel/.claude
+COPY config/claude-settings.json /etc/skel/.claude/settings.json
 
 # =============================================================================
 # 7. Switch to devuser
@@ -190,9 +194,22 @@ RUN mkdir -p $HOME/.config/mise \
 RUN curl -fsSL https://claude.ai/install.sh | bash
 
 # =============================================================================
-# 11. tmux plugin manager (tpm)
+# 11. tmux plugin manager (tpm) + プラグイン本体
 # =============================================================================
-RUN git clone https://github.com/tmux-plugins/tpm $HOME/.tmux/plugins/tpm
+# tpm を clone するだけではプラグインは入らない（初回に手動で prefix+I が必要）。
+# catppuccin が無いと status-right の @catppuccin_status_* が空に展開され、
+# ステータスバーがほぼ空になる。tmux-sensible には prefix R/r の
+# リロード・再描画バインドが含まれるので、これも入れておく。
+RUN git clone https://github.com/tmux-plugins/tpm $HOME/.tmux/plugins/tpm \
+    && $HOME/.tmux/plugins/tpm/bin/install_plugins
+
+# gitmux: ステータスバーの Git 表示に必要（config/.tmux.conf が参照している）
+# 設定ファイル自体は /etc/skel 経由で entrypoint が配置する
+RUN go install github.com/arl/gitmux@latest
+
+# Claude Code の状態を tmux のペインボーダーに出すフック用スクリプト
+COPY --chown=devuser:devuser scripts/claude-tmux-state /home/devuser/.local/bin/claude-tmux-state
+RUN chmod +x /home/devuser/.local/bin/claude-tmux-state
 
 # =============================================================================
 # 12. Entrypoint
