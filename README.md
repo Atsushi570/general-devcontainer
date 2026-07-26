@@ -49,10 +49,12 @@ docker compose up -d
 
 # コンテナに入る
 docker exec -it general-dev zsh
+dg                                      # 同じ（dot-files の zsh 関数）
 
 # コンテナ内での操作
 ghq get git@github.com:org/repo.git    # リポジトリクローン
 dev                                     # fzf でリポジトリ選択
+tm <name>                               # tmux セッションを作成／アタッチ（引数なしで fzf）
 claude                                  # Claude Code 起動（初回は claude login）
 gh auth login                           # GitHub CLI 認証（初回のみ）
 git worktree add ../feature branch      # worktree も問題なし
@@ -83,8 +85,35 @@ docker compose up -d --build
 docker exec general-dev cp /etc/skel/.zshrc ~/
 docker exec general-dev cp /etc/skel/.gitconfig ~/
 docker exec general-dev cp /etc/skel/.tmux.conf ~/
+docker exec general-dev cp /etc/skel/.gitmux.conf ~/
+docker exec general-dev cp /etc/skel/.claude/settings.json ~/.claude/settings.json
 docker exec general-dev cp /etc/skel/.config/mise/config.toml ~/.config/mise/config.toml
 ```
+
+> [!WARNING]
+> `.claude/settings.json` を上書きすると、コンテナ内で加えた権限設定などのカスタマイズが消える。認証情報（`.credentials.json`）は別ファイルなので影響しない。
+
+## tmux と Claude Code の状態表示
+
+複数ペインで Claude Code を動かしたとき、どれが実行中でどれが入力待ちかをペインボーダーの色と帯で表示する。
+
+| 状態 | 表示 |
+| --- | --- |
+| 実行中 | 青 `▶ 実行中` |
+| 入力待ち | 黄 `●●● 入力待ち ●●●` |
+| 完了 | 緑 `✓ 完了` |
+
+`config/claude-settings.json` の `hooks` から `scripts/claude-tmux-state` を呼び、ペインの `@claude_state` に状態を記録する。`config/.tmux.conf` がそれを見て `pane-border-style` / `pane-border-format` を切り替える。
+
+コンテナには音声デバイスが無いので音は鳴らせない。代わりにベル（`\a`）を出し、ホスト側の tmux の `monitor-bell` 経由で iTerm2 に通知する（iTerm2 で Settings → Profiles → Terminal → Notifications → Audible bell を有効にすること）。ホスト側では音も鳴る（[dot-files](https://github.com/Atsushi570/dot-files) 側で管理）。
+
+### ステータスバー
+
+`config/.tmux.conf` は Catppuccin テーマと `gitmux` を参照している。どちらも Dockerfile で導入済み:
+
+- **tpm のプラグイン本体** — `tpm` を clone するだけでは入らないため、ビルド時に `install_plugins` を実行している。Catppuccin が無いと `@catppuccin_status_*` が空に展開され、ステータスバーがほぼ空になる
+- **`prefix R` / `prefix r`**（設定リロード・再描画）— `tmux-sensible` 由来
+- **`gitmux`** — `go install` で導入。設定は `/etc/skel/.gitmux.conf`
 
 ## ネットワーク
 
