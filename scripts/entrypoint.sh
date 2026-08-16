@@ -26,7 +26,7 @@ init_dotfiles() {
   # Copy dotfiles from /etc/skel/
   # Fresh volume: always copy (overwrite Oh My Zsh's default .zshrc and Dockerfile's copies)
   # Existing volume: only copy if file doesn't exist
-  local files=(".zshenv" ".zshrc" ".gitconfig" ".tmux.conf" ".gitmux.conf" ".config/mise/config.toml" ".claude/settings.json")
+  local files=(".zshenv" ".zshrc" ".gitconfig" ".tmux.conf" ".gitmux.conf" ".tmux/gitmux-cached.sh" ".config/mise/config.toml" ".claude/settings.json")
   for f in "${files[@]}"; do
     if [ "$fresh_install" = true ] || [ ! -f "$HOME_DIR/$f" ]; then
       if [ -f "$SKEL_DIR/$f" ]; then

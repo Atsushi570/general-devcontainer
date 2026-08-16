@@ -159,6 +159,10 @@ COPY config/.zshrc /etc/skel/.zshrc
 COPY config/.gitconfig /etc/skel/.gitconfig
 COPY config/.tmux.conf /etc/skel/.tmux.conf
 COPY config/.gitmux.conf /etc/skel/.gitmux.conf
+# ステータスバーから gitmux を呼ぶラッパー（.tmux.conf が参照する）
+RUN mkdir -p /etc/skel/.tmux
+COPY config/gitmux-cached.sh /etc/skel/.tmux/gitmux-cached.sh
+RUN chmod 755 /etc/skel/.tmux/gitmux-cached.sh
 RUN mkdir -p /etc/skel/.config/mise
 COPY config/mise-config.toml /etc/skel/.config/mise/config.toml
 # Claude Code のフック定義（ペインボーダーの状態表示を呼び出す）
