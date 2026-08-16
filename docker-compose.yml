@@ -5,6 +5,9 @@ services:
     network_mode: host
     hostname: devcontainer
     restart: unless-stopped
+    # PID 1 を tini にして、孤児プロセスを reap させる
+    # (これがないと CMD の sleep infinity が PID 1 になりゾンビが溜まり続ける)
+    init: true
     depends_on:
       dind:
         condition: service_healthy
