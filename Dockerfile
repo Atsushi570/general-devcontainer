@@ -205,7 +205,9 @@ RUN curl -fsSL https://claude.ai/install.sh | bash
 # ステータスバーがほぼ空になる。tmux-sensible には prefix R/r の
 # リロード・再描画バインドが含まれるので、これも入れておく。
 RUN git clone https://github.com/tmux-plugins/tpm $HOME/.tmux/plugins/tpm \
-    && $HOME/.tmux/plugins/tpm/bin/install_plugins
+    && cp /etc/skel/.tmux.conf $HOME/.tmux.conf \
+    && $HOME/.tmux/plugins/tpm/bin/install_plugins \
+    && rm $HOME/.tmux.conf
 
 # gitmux: ステータスバーの Git 表示に必要（config/.tmux.conf が参照している）
 # 設定ファイル自体は /etc/skel 経由で entrypoint が配置する
