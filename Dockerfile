@@ -147,6 +147,33 @@ RUN FZF_VERSION=$(curl -fsSL https://api.github.com/repos/junegunn/fzf/releases/
     | tar -xz -C /usr/local/bin
 
 # =============================================================================
+# 5b. draw.io CLI (ヘッドレスで .drawio -> png/pdf/svg を書き出す)
+# =============================================================================
+# drawio-desktop は Electron アプリなので、ヘッドレスで動かすには X サーバ
+# (xvfb) とサンドボックス無効化が要る。
+#
+# libasound2t64 は明示的に入れる。deb の依存では Recommends 扱いで、
+# --no-install-recommends だと落ちてしまい、起動時に
+# 「libasound.so.2: cannot open shared object file」で失敗する。
+#
+# fonts-noto-cjk はコンテナに日本語フォントが無いため必須。入れないと
+# 日本語のラベルが全部 □（豆腐）になった PNG が出来上がる。
+RUN DRAWIO_VERSION=$(curl -fsSL https://api.github.com/repos/jgraph/drawio-desktop/releases/latest | jq -r .tag_name | sed 's/^v//') \
+    && ARCH=$(dpkg --print-architecture) \
+    && curl -fsSL "https://github.com/jgraph/drawio-desktop/releases/download/v${DRAWIO_VERSION}/drawio-${ARCH}-${DRAWIO_VERSION}.deb" \
+    -o /tmp/drawio.deb \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends /tmp/drawio.deb xvfb libasound2t64 fonts-noto-cjk \
+    && rm /tmp/drawio.deb \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# drawio を素で呼ぶと DISPLAY 無し・サンドボックス有効で落ちるので、
+# xvfb と --no-sandbox を噛ませたラッパを標準の入口にする。
+#   drawio-export -x -e -f png -o out.drawio.png in.drawio
+COPY scripts/drawio-export /usr/local/bin/drawio-export
+RUN chmod +x /usr/local/bin/drawio-export
+
+# =============================================================================
 # 6. Dotfiles to /etc/skel/ (home is overwritten by volume)
 # =============================================================================
 COPY config/ssh_config /etc/ssh/ssh_config.d/99-devcontainer.conf

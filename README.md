@@ -27,6 +27,7 @@ Mac とほぼ同じ体験で開発できる汎用 Docker 開発環境。
 | ランタイム管理 | mise (Node.js LTS, Python, Go, Java zulu-25) |
 | クラウド       | AWS CLI v2                                   |
 | IaC            | Terraform                                    |
+| 作図           | draw.io CLI（`drawio-export`）               |
 | AI             | Claude Code                                  |
 
 ## セットアップ

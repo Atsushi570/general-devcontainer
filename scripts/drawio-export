@@ -1,0 +1,33 @@
+#!/bin/sh
+# draw.io をヘッドレスで動かすためのラッパ。
+#
+# drawio-desktop は Electron アプリなので、コンテナ内でそのまま呼ぶと
+#   - DISPLAY が無くて起動できない
+#   - Chromium のサンドボックスが使えず落ちる
+# の2つで失敗する。xvfb-run で仮想ディスプレイを与え、--no-sandbox を
+# 常に付けることで、引数はそのまま drawio に渡せるようにしている。
+#
+# 使い方（引数は drawio と同じ）:
+#   drawio-export -x -f png -o out.png in.drawio
+#   drawio-export -x -f pdf -o out.pdf -p 1 in.drawio
+#
+# ページ指定 -p / --page-index は 1 始まり。省略すると画像形式では
+# 先頭ページになる。PDF で全ページ出すなら -a を付ける。
+#
+# 図を貼る用途なら .drawio.png を勧める:
+#   drawio-export -x -e -f png -o out.drawio.png in.drawio
+# -e (--embed-diagram) を付けると PNG のメタデータに図の XML が入るので、
+# 画像として表示できて、かつ draw.io で開けば編集もできる。原本と書き出しを
+# 二重に持たなくて済む。
+
+set -eu
+
+if [ $# -eq 0 ]; then
+    echo "usage: drawio-export [drawio options] <file.drawio>" >&2
+    echo "example: drawio-export -x -e -f png -o out.drawio.png in.drawio" >&2
+    exit 2
+fi
+
+export ELECTRON_DISABLE_SECURITY_WARNINGS=1
+
+exec xvfb-run -a drawio --no-sandbox "$@"
