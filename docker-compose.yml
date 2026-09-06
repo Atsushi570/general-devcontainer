@@ -23,11 +23,20 @@ services:
         source: ${HOME}/.ssh
         target: /home/devuser/.host-ssh
         read_only: true
+      # SSH keys/ subdir: mounted live (read-write) so host-side additions/edits
+      # show up immediately without a container restart. entrypoint symlinks
+      # .ssh/keys -> this path instead of rsync-copying it.
+      - ${HOME}/.ssh/keys:/home/devuser/.ssh-keys-live
       # AWS profiles (read-only from host)
       - type: bind
         source: ${HOME}/.aws
         target: /home/devuser/.host-aws
         read_only: true
+      # AWS SSO token cache: mounted live (read-write) so `aws sso login` on the
+      # host takes effect in the container immediately. Without this the cache is
+      # a one-time copy (see sync_aws in entrypoint.sh) and the container keeps
+      # using a token that expired days ago while the host's is fresh.
+      - ${HOME}/.aws/sso/cache:/home/devuser/.aws-sso-cache-live
       # Google Workspace CLI credentials
       - ${HOME}/.config/gws:/home/devuser/.config/gws
       # Google Cloud CLI credentials (for bq/gcloud)

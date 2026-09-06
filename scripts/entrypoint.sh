@@ -99,19 +99,27 @@ setup_ssh() {
   if [ -d "$HOME_DIR/.host-ssh" ]; then
     mkdir -p "$HOME_DIR/.ssh"
     chmod 700 "$HOME_DIR/.ssh"
-    # Mirror everything except macOS metadata (.DS_Store) from host .ssh,
-    # including subdirectories like keys/ and pem/, plus config / known_hosts.
-    # rsync preserves layout; fall back to cp -R if rsync is unavailable.
+    # Mirror everything except macOS metadata (.DS_Store) and keys/ from host
+    # .ssh (keys/ is bind-mounted live separately, see below), plus config /
+    # known_hosts / pem. rsync preserves layout; fall back to cp -R if
+    # rsync is unavailable.
     if command -v rsync &>/dev/null; then
       rsync -a --delete \
         --exclude='.DS_Store' \
+        --exclude='keys' \
         "$HOME_DIR/.host-ssh/" "$HOME_DIR/.ssh/"
     else
-      # cp fallback: wipe and recopy (excluding .DS_Store)
-      find "$HOME_DIR/.ssh/" -mindepth 1 -maxdepth 1 ! -name '.host-ssh' -exec rm -rf {} +
-      cp -R "$HOME_DIR/.host-ssh/." "$HOME_DIR/.ssh/"
-      find "$HOME_DIR/.ssh" -name '.DS_Store' -delete
+      # cp fallback: wipe and recopy (excluding .DS_Store and keys)
+      find "$HOME_DIR/.ssh/" -mindepth 1 -maxdepth 1 ! -name '.host-ssh' ! -name 'keys' -exec rm -rf {} +
+      find "$HOME_DIR/.host-ssh" -mindepth 1 -maxdepth 1 ! -name '.DS_Store' ! -name 'keys' \
+        -exec cp -R {} "$HOME_DIR/.ssh/" \;
     fi
+
+    # keys/ is bind-mounted live from the host (see .ssh-keys-live in
+    # docker-compose.yml) so additions/edits on the host show up without a
+    # container restart. Symlink it in rather than letting rsync copy it.
+    rm -rf "$HOME_DIR/.ssh/keys"
+    ln -s "$HOME_DIR/.ssh-keys-live" "$HOME_DIR/.ssh/keys"
 
     # Strip macOS-only options from config (UseKeychain / AddKeysToAgent)
     if [ -f "$HOME_DIR/.ssh/config" ]; then
@@ -181,6 +189,17 @@ sync_aws() {
   if [ -d "$HOME_DIR/.host-aws" ] && [ ! -d "$HOME_DIR/.aws" ]; then
     cp -r "$HOME_DIR/.host-aws" "$HOME_DIR/.aws"
     echo "[entrypoint] AWS config synced from host"
+  fi
+
+  # sso/cache is bind-mounted live from the host (see .aws-sso-cache-live in
+  # docker-compose.yml) so `aws sso login` on the host applies here without a
+  # container restart. The copy above runs only when .aws is absent, so without
+  # this symlink the container would keep a stale token indefinitely.
+  if [ -d "$HOME_DIR/.aws-sso-cache-live" ]; then
+    mkdir -p "$HOME_DIR/.aws/sso"
+    rm -rf "$HOME_DIR/.aws/sso/cache"
+    ln -s "$HOME_DIR/.aws-sso-cache-live" "$HOME_DIR/.aws/sso/cache"
+    echo "[entrypoint] AWS SSO cache linked to host (live)"
   fi
 }
 
