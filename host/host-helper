@@ -1,0 +1,96 @@
+#!/bin/bash
+# host-helper: the only entry point the devcontainer's mac_host key can reach
+# (forced command in ~/.ssh/authorized_keys). Runs as the normal Mac user and
+# dispatches an allowlist of subcommands; root-only work goes through sudo to
+# individual files under libexec (see /etc/sudoers.d/host-helper).
+set -euo pipefail
+PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin
+
+LIBEXEC=/usr/local/libexec/host-helper
+GHQ_HOST="$HOME/devcontainer-ghq"
+GHQ_CONTAINER=/home/devuser/ghq
+
+die() { echo "host-helper: $*" >&2; exit 1; }
+
+usage() {
+  cat <<'EOF'
+usage: ssh mac-host <command> [args...]
+
+  ping                               check the connection
+  sd list                            list writable SD/USB media
+  sd write <image> <diskN> <bytes>   write an image (.img/.raw/.iso/.xz/.gz/.zst)
+                                     <bytes> is the BYTES column from `sd list`
+                                     <image> is a path under ~/ghq (container)
+                                     or ~/devcontainer-ghq (host)
+EOF
+}
+
+# Map a container or host path to a real host path under ~/devcontainer-ghq.
+resolve_image() {
+  local p=$1 root real
+  case "$p" in
+    "$GHQ_CONTAINER"/*) p="$GHQ_HOST/${p#"$GHQ_CONTAINER"/}" ;;
+    /*) ;;
+    *) p="$GHQ_HOST/$p" ;;
+  esac
+  root=$(realpath "$GHQ_HOST") || die "$GHQ_HOST not found"
+  real=$(realpath "$p" 2>/dev/null) || die "image not found: $1"
+  case "$real" in "$root"/*) ;; *) die "image must be under ~/devcontainer-ghq: $1" ;; esac
+  [ -f "$real" ] || die "not a regular file: $1"
+  echo "$real"
+}
+
+decompress() {
+  case "$1" in
+    *.xz) xz -dc "$1" ;;
+    *.gz) gzip -dc "$1" ;;
+    *.zst) zstd -dc "$1" ;;
+    *) cat "$1" ;;
+  esac
+}
+
+sd_write() {
+  [ $# = 3 ] || die "usage: sd write <image> <diskN> <bytes>"
+  local img disk=$2 expect=$3 tool
+  case "$expect" in '' | *[!0-9]*) die "<bytes> must be a number (BYTES column of 'sd list')" ;; esac
+  img=$(resolve_image "$1")
+  case "$img" in
+    *.xz) tool=xz ;; *.gz) tool=gzip ;; *.zst) tool=zstd ;;
+    *.img | *.raw | *.iso | *.bin)
+      tool=''
+      [ "$(stat -f %z "$img")" -le "$expect" ] || die "image is larger than the target disk"
+      ;;
+    *) die "unsupported image type: $img" ;;
+  esac
+  [ -z "$tool" ] || command -v "$tool" >/dev/null || die "$tool not installed on the host (brew install $tool)"
+  echo "host-helper: image $img" >&2
+  decompress "$img" | sudo -n "$LIBEXEC/sd-write" "$disk" "$expect"
+}
+
+# Called over ssh: the requested command arrives in SSH_ORIGINAL_COMMAND.
+# Split it on spaces only (no globbing, no quotes) after a character allowlist.
+if [ -n "${SSH_ORIGINAL_COMMAND:-}" ]; then
+  case "$SSH_ORIGINAL_COMMAND" in
+    *[!A-Za-z0-9._/@:=+,\ -]*) die "unsupported characters in command" ;;
+  esac
+  set -f
+  # shellcheck disable=SC2086
+  set -- $SSH_ORIGINAL_COMMAND
+  set +f
+fi
+
+[ $# -gt 0 ] || { usage; exit 1; }
+cmd=$1; shift
+case "$cmd" in
+  ping) echo "pong from $(scutil --get LocalHostName 2>/dev/null || hostname) as $(id -un)" ;;
+  help | -h | --help) usage ;;
+  sd)
+    sub=${1:-}; shift || true
+    case "$sub" in
+      list) exec "$LIBEXEC/sd-list" ;;
+      write) sd_write "$@" ;;
+      *) die "usage: sd list | sd write <image> <diskN> <bytes>" ;;
+    esac
+    ;;
+  *) usage >&2; exit 1 ;;
+esac

@@ -1,0 +1,35 @@
+#!/bin/bash
+# sd-write <diskN> <expected-bytes>
+# Write the image on stdin to /dev/rdiskN. Runs as root via sudo, so it only
+# touches the disk: decompression and path checks stay in host-helper (user).
+set -euo pipefail
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+# shellcheck source=SCRIPTDIR/../lib/sd.sh
+. /usr/local/libexec/host-helper/lib/sd.sh
+
+die() { echo "sd-write: $*" >&2; exit 1; }
+
+[ "$(id -u)" = 0 ] || die "must run as root"
+[ $# = 2 ] || die "usage: sd-write <diskN> <expected-bytes>  (image on stdin)"
+disk=$1 expect=$2
+[ ! -t 0 ] || die "image must be piped on stdin"
+
+sd_eligible "$disk" || die "$SD_REASON"
+# Disk numbers shift when media is re-inserted; the size from `sd list` pins
+# the write to the card that was actually looked at.
+[ "$SD_SIZE" = "$expect" ] ||
+  die "size mismatch on $disk: expected $expect, found $SD_SIZE (run 'sd list' again)"
+
+echo "sd-write: writing to /dev/r$disk ($SD_MEDIA, $(human_size "$SD_SIZE"), $SD_PROTO)" >&2
+diskutil unmountDisk "/dev/$disk" >&2
+
+progress=''
+dd if=/dev/zero of=/dev/null count=1 status=progress 2>/dev/null && progress='status=progress'
+# Separate ibs/obs makes dd reassemble short pipe reads into full blocks;
+# raw devices reject writes that are not sector-aligned.
+# shellcheck disable=SC2086
+dd of="/dev/r$disk" ibs=1m obs=4m $progress
+sync
+
+diskutil eject "/dev/$disk" >&2
+echo "sd-write: done, $disk ejected" >&2

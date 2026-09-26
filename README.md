@@ -12,6 +12,7 @@ Mac とほぼ同じ体験で開発できる汎用 Docker 開発環境。
 - **Docker-in-Docker（DinD）**: 専用のサイドカーコンテナで独立した Docker デーモンを動かし、`docker run -v $(pwd):/...` などホストパス依存のないクリーンな挙動を実現
 - **ホスト Docker へのフォールバック**: ホストの Docker デーモンも `DOCKER_HOST=unix:///var/run/host-docker.sock` で利用可能
 - **Host networking**: `network_mode: host` でコンテナ内のポートをそのまま Mac から `localhost` でアクセス可能（ポート公開設定不要）
+- **ホストのコマンド実行（host-helper）**: SD カードへのイメージ書き込みなど、コンテナから触れないホスト操作を `ssh mac-host <command>` で実行できる。許可リスト方式で、専用鍵にはシェルを渡さない（→ [host/README.md](host/README.md)）
 
 ## 含まれるツール
 

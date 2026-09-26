@@ -1,0 +1,20 @@
+#!/bin/bash
+# List disks that `sd write` would accept. Runs as the normal user.
+set -euo pipefail
+# shellcheck source=SCRIPTDIR/../lib/sd.sh
+. /usr/local/libexec/host-helper/lib/sd.sh
+
+disks=$(diskutil list -plist physical | plutil -extract WholeDisks json -o - - | tr -d '[]" ' | tr ',' '\n')
+
+found=0
+for d in $disks; do
+  sd_eligible "$d" || continue
+  [ "$found" = 1 ] || printf '%-8s %-14s %-8s %-16s %s\n' DISK BYTES SIZE PROTOCOL MEDIA
+  found=1
+  printf '%-8s %-14s %-8s %-16s %s\n' "$d" "$SD_SIZE" "$(human_size "$SD_SIZE")" "$SD_PROTO" "$SD_MEDIA"
+done
+
+if [ "$found" = 0 ]; then
+  echo "no writable SD/USB media found (removable, physical, <= 128 GiB)" >&2
+  exit 1
+fi
