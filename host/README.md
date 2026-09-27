@@ -59,6 +59,29 @@ ssh mac-host sd write ~/ghq/path/to/pir-v1.2.img.xz disk4 31914983424
 - `.xz` / `.gz` / `.zst` は Mac 側で展開しながら書き込む。`xz` と `zstd` は Homebrew で入れておく。展開は一般ユーザー権限で行い、root で動くのは `dd` の部分だけ。
 - 書き終わるとディスクを eject する。数 GB のイメージだと数分かかる。
 
+### センサの identity をカードに書く（`sd identity`）
+
+```bash
+ssh mac-host sd identity ~/ghq/path/to/cards/01 disk4 31914983424
+```
+
+master イメージを書いた（またはデュプリケーターで複製した）カードの identity 投入口へ、機体ごとの identity を書き込む。投入口はラベルで見分ける。
+
+| ラベル | センサ | 中身 |
+|---|---|---|
+| `MW_BOOT` | PIR（Armbian） | identity 専用の空の FAT。identity 以外のファイルがあれば中断する |
+| `bootfs` | 赤外線アレイ（Raspberry Pi OS） | Pi の `/boot/firmware` そのもの。OS のファイルがあるので、`config.txt`・`cmdline.txt`・`mw-master-image` が揃っていることを確かめる（mw-kit と同じ条件）。identity 以外のファイルには触らない |
+master は 1 枚だけ `sd write` で作り、残りを複製してから 1 枚ずつこれを流す、という使い方を想定している。
+
+- `<dir>` には `identity.json`・`thingCert.crt`・`privKey.key`（必須）と `authorized_keys`（任意）だけが入っていること。それ以外のファイルがあると中断する。`mw-kit issue --card <dir>/MW_BOOT` の出力先をそのまま渡せばよい。
+- ディスクの確認は `sd write` と同じ（`sd list` に出るディスクで、容量が一致すること）。そのうえで、ラベルが `MW_BOOT` か `bootfs` の FAT パーティションがちょうど 1 つあることを確かめる。
+- `etc/`・`greengrass/` があれば中断する（rootfs の取り違え）。前の identity が残っていれば置き換える。
+- `cp -X` で書き、macOS が作る `._*`・`.Spotlight-V100`・`.fseventsd` などは消す。
+- 書いたあと一度アンマウントしてから再マウントし、元のファイルと `cmp` で照合する。ページキャッシュではなくカードから読み戻すため。
+- 最後に thingName を表示して eject する。
+- root は要らない（`diskutil mount` は取り外し可能な FAT ボリュームを一般ユーザーでマウントできる）。sudoers は変わらない。
+- `sd write` は書き終わると eject するので、`sd identity` の前にカードを挿し直し、`sd list` でディスク番号を確かめ直す。
+
 ## サブコマンドを足す
 
 1. `host/libexec/<name>` にスクリプトを置く。
@@ -70,4 +93,6 @@ ssh 越しの引数は、英数字と `._/@:=+,-` とスペースしか通さな
 
 ## 未検証の点
 
-MacBook Pro（内蔵 SDXC リーダー）で確認できているのは、接続、強制コマンドによる制限（任意コマンドとポート転送の拒否）、`sd list` での SD カード検出まで。`sd write` による実際の書き込みと、USB 接続のカードリーダーでの検出はまだ試していない。
+MacBook Pro（内蔵 SDXC リーダー）で確認できているのは、接続、強制コマンドによる制限（任意コマンドとポート転送の拒否）、`sd list`、`sd write`（PIR 6.7GB・赤外線アレイ 15GB、約 50MB/s）、`sd identity`（`MW_BOOT` 14 枚・`bootfs` 7 枚）まで。USB 接続のカードリーダーでの検出はまだ試していない。
+
+`sd write` が `dd: /dev/rdiskN: Operation not permitted` で止まるときは、Mac のフルディスクアクセスが足りない。システム設定 → プライバシーとセキュリティ → フルディスクアクセスで `sshd-keygen-wrapper` を ON にする。root で動いていても、ssh 経由のプロセスはこれが無いと raw デバイスに書けない。

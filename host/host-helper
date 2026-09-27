@@ -22,11 +22,14 @@ usage: ssh mac-host <command> [args...]
                                      <bytes> is the BYTES column from `sd list`
                                      <image> is a path under ~/ghq (container)
                                      or ~/devcontainer-ghq (host)
+  sd identity <dir> <diskN> <bytes>  copy a sensor identity onto the card's
+                                     MW_BOOT partition, verify, and eject
+                                     <dir> is a directory under ~/ghq
 EOF
 }
 
 # Map a container or host path to a real host path under ~/devcontainer-ghq.
-resolve_image() {
+resolve_path() {
   local p=$1 root real
   case "$p" in
     "$GHQ_CONTAINER"/*) p="$GHQ_HOST/${p#"$GHQ_CONTAINER"/}" ;;
@@ -34,10 +37,25 @@ resolve_image() {
     *) p="$GHQ_HOST/$p" ;;
   esac
   root=$(realpath "$GHQ_HOST") || die "$GHQ_HOST not found"
-  real=$(realpath "$p" 2>/dev/null) || die "image not found: $1"
-  case "$real" in "$root"/*) ;; *) die "image must be under ~/devcontainer-ghq: $1" ;; esac
+  real=$(realpath "$p" 2>/dev/null) || die "not found: $1"
+  case "$real" in "$root"/*) ;; *) die "path must be under ~/devcontainer-ghq: $1" ;; esac
+  echo "$real"
+}
+
+resolve_image() {
+  local real
+  real=$(resolve_path "$1")
   [ -f "$real" ] || die "not a regular file: $1"
   echo "$real"
+}
+
+sd_identity() {
+  [ $# = 3 ] || die "usage: sd identity <dir> <diskN> <bytes>"
+  local dir
+  case "$3" in '' | *[!0-9]*) die "<bytes> must be a number (BYTES column of 'sd list')" ;; esac
+  dir=$(resolve_path "$1")
+  [ -d "$dir" ] || die "not a directory: $1"
+  exec "$LIBEXEC/sd-identity" "$dir" "$2" "$3"
 }
 
 decompress() {
@@ -89,7 +107,8 @@ case "$cmd" in
     case "$sub" in
       list) exec "$LIBEXEC/sd-list" ;;
       write) sd_write "$@" ;;
-      *) die "usage: sd list | sd write <image> <diskN> <bytes>" ;;
+      identity) sd_identity "$@" ;;
+      *) die "usage: sd list | sd write <image> <diskN> <bytes> | sd identity <dir> <diskN> <bytes>" ;;
     esac
     ;;
   *) usage >&2; exit 1 ;;

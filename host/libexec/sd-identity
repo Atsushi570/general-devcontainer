@@ -1,0 +1,126 @@
+#!/bin/bash
+# sd-identity <dir> <diskN> <expected-bytes>
+# Copy a sensor identity (identity.json, thingCert.crt, privKey.key and
+# optionally authorized_keys) onto the identity drop-off of an SD card, read it
+# back after a remount and eject. Two card layouts are recognised by label:
+#   MW_BOOT  PIR (Armbian): a dedicated, otherwise empty FAT partition
+#   bootfs   thermal (Raspberry Pi OS): the Pi's own /boot/firmware, full of OS
+#            files, so it must also carry config.txt, cmdline.txt and the
+#            mw-master-image marker the MW master image leaves behind Runs as the normal user: diskutil can mount a
+# removable FAT volume without root, so no sudoers entry is needed.
+# <dir> has already been resolved to a real path under ~/devcontainer-ghq.
+set -euo pipefail
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+# shellcheck source=SCRIPTDIR/../lib/sd.sh
+. /usr/local/libexec/host-helper/lib/sd.sh
+
+die() { echo "sd-identity: $*" >&2; exit 1; }
+
+LABELS="MW_BOOT bootfs"
+# bootfs is the name Raspberry Pi OS gives every card, so the label alone proves
+# little there: these files must also be present (same rule as mw-kit).
+BOOTFS_MARKERS="config.txt cmdline.txt mw-master-image"
+REQUIRED="identity.json thingCert.crt privKey.key"
+OPTIONAL="authorized_keys"
+# macOS litter on FAT volumes. Harmless to the device (it only reads the named
+# files) but removed so the card holds nothing but the identity.
+LITTER=".Spotlight-V100 .fseventsd .Trashes .TemporaryItems"
+
+[ $# = 3 ] || die "usage: sd-identity <dir> <diskN> <expected-bytes>"
+src=$1 disk=$2 expect=$3
+
+# --- the identity directory: exactly the known files, nothing else
+[ -d "$src" ] || die "not a directory: $src"
+files=''
+for f in $REQUIRED; do
+  [ -f "$src/$f" ] || die "$src/$f is missing"
+  files="$files $f"
+done
+for f in $OPTIONAL; do
+  [ -f "$src/$f" ] && files="$files $f"
+done
+for p in "$src"/* "$src"/.[!.]*; do
+  [ -e "$p" ] || continue
+  n=$(basename "$p")
+  case " $REQUIRED $OPTIONAL " in *" $n "*) ;; *) die "unexpected file in $src: $n" ;; esac
+done
+for f in $files; do
+  [ "$(stat -f %z "$src/$f")" -le 65536 ] || die "$src/$f is too large for an identity file"
+done
+
+# --- the card: same guards as sd write
+sd_eligible "$disk" || die "$SD_REASON"
+[ "$SD_SIZE" = "$expect" ] ||
+  die "size mismatch on $disk: expected $expect, found $SD_SIZE (run 'sd list' again)"
+
+# --- find the one FAT partition labelled MW_BOOT or bootfs on this disk
+boot='' BOOT_LABEL=''
+for i in 1 2 3 4 5 6 7 8; do
+  p=${disk}s$i
+  info=$(diskutil info -plist "/dev/$p" 2>/dev/null) || continue
+  name=$(plist_get "$info" VolumeName) || continue
+  case " $LABELS " in *" $name "*) ;; *) continue ;; esac
+  [ -z "$boot" ] || die "more than one identity partition on $disk ($BOOT_LABEL, $name)"
+  boot=$p BOOT_LABEL=$name
+done
+[ -n "$boot" ] || die "no MW_BOOT or bootfs partition on $disk - write the master image first"
+info=$(diskutil info -plist "/dev/$boot")
+case "$(plist_get "$info" FilesystemType)" in
+  msdos) ;;
+  *) die "$boot is labelled $BOOT_LABEL but is not FAT" ;;
+esac
+
+mount_boot() {
+  diskutil mount "/dev/$boot" >/dev/null || die "cannot mount $boot"
+  mnt=$(plist_get "$(diskutil info -plist "/dev/$boot")" MountPoint) || die "no mount point for $boot"
+  [ -d "$mnt" ] || die "mount point $mnt not found"
+}
+tidy() {
+  for l in $LITTER; do rm -rf "${mnt:?}/$l" 2>/dev/null || true; done
+  rm -f "$mnt"/._* 2>/dev/null || true
+}
+
+echo "sd-identity: $disk ($SD_MEDIA, $(human_size "$SD_SIZE")) partition $boot ($BOOT_LABEL)" >&2
+mount_boot
+
+# Refuse anything that looks like a root filesystem.
+for stray in etc greengrass; do
+  [ ! -d "$mnt/$stray" ] || die "$mnt contains $stray/ - not the identity drop-off"
+done
+if [ "$BOOT_LABEL" = MW_BOOT ]; then
+  # A freshly imaged PIR card has an empty boot partition by design, so
+  # anything else there means this is not the card we think it is.
+  [ ! -d "$mnt/boot" ] || die "$mnt contains boot/ - not the identity drop-off"
+  for p in "$mnt"/*; do
+    [ -e "$p" ] || continue
+    n=$(basename "$p")
+    case " $REQUIRED $OPTIONAL " in *" $n "*) ;; *) die "$mnt already holds an unexpected file: $n" ;; esac
+  done
+else
+  for m in $BOOTFS_MARKERS; do
+    [ -f "$mnt/$m" ] || die "$mnt has no $m - not a card written from an MW thermal master image"
+  done
+fi
+# A previous identity for another thing is replaced, never merged.
+for f in $REQUIRED $OPTIONAL; do rm -f "$mnt/$f"; done
+
+for f in $files; do
+  cp -X "$src/$f" "$mnt/$f" # -X: no extended attributes, so no ._ files
+done
+tidy
+sync
+diskutil unmount "/dev/$boot" >/dev/null || die "cannot unmount $boot"
+
+# Read back from the card, not from the page cache: remount first.
+mount_boot
+for f in $files; do
+  cmp -s "$src/$f" "$mnt/$f" || die "$f on the card does not match $src/$f"
+done
+thing=$(sed -n 's/.*"thingName"[^"]*"\([^"]*\)".*/\1/p' "$mnt/identity.json")
+tidy
+sync
+echo "sd-identity: verified$files" >&2
+echo "sd-identity: thingName $thing" >&2
+
+diskutil eject "/dev/$disk" >&2
+echo "sd-identity: done, $disk ejected" >&2
