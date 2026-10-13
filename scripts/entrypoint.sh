@@ -225,6 +225,17 @@ install_runtimes() {
 }
 
 # =============================================================================
+# 8. Claude Code global skills (link from claude-skills repo if cloned)
+# =============================================================================
+link_claude_skills() {
+  local installer="$HOME_DIR/ghq/github.com/Atsushi570/claude-skills/install.sh"
+  if [ -x "$installer" ]; then
+    "$installer" || echo "[entrypoint] WARNING: claude-skills install had errors (non-fatal)"
+    echo "[entrypoint] Claude Code global skills linked"
+  fi
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 echo "[entrypoint] Initializing devcontainer..."
@@ -238,6 +249,7 @@ setup_git
 sync_aws
 sync_gws
 install_runtimes
+link_claude_skills
 
 echo "[entrypoint] Ready!"
 
